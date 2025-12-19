@@ -4,9 +4,13 @@ This repository contains code and tools for weather regime detection and lifecyc
 
 ## Structure
   D:\levante
+  
   │── weather_regime\
+  
   │── README.md
+  
   │── .gitignore
+  
   │── .git\
 
 
