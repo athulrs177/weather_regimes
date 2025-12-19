@@ -2,6 +2,7 @@
 
 This repository contains the Python-based scritps for computing and detecting weather regimes as explained in Grams et al. 2017 (Balancing Europe’s wind-power output through spatial deployment informed by weather regimes).
 
+![Weather Regimes DJF](weather_regimeDJF.png)
 
 ## Requirements
 - Python 3.9+
