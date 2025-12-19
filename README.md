@@ -3,11 +3,11 @@
 This repository contains code and tools for weather regime detection and lifecycle analysis.
 
 ## Structure
-D:\levante
-│── weather_regime\
-│── README.md
-│── .gitignore
-│── .git\
+  D:\levante
+  │── weather_regime\
+  │── README.md
+  │── .gitignore
+  │── .git\
 
 
 ## Requirements
