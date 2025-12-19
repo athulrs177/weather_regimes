@@ -1,6 +1,6 @@
 # Weather Regime Analysis
 
-This repository contains the entirely Python-based tool for computing and detecting weather regimes as explained in Grams et al. 2017 (Balancing Europe’s wind-power output through spatial deployment informed by weather regimes). Later modifications including latitudinal impact on the intensity of weather regimes and use of forecast/model datasets are also accounted for in this verison.
+This repository contains the entirely Python-based tool for computing and detecting weather regimes as explained in Grams et al. 2017 (Balancing Europe’s wind-power output through spatial deployment informed by weather regimes). Recent modifications including latitudinal impact on the intensity of weather regimes and use of forecast/model datasets are also accounted for in this verison.
 
 ![Weather Regimes DJF](weather_regimeDJF.png)
 
