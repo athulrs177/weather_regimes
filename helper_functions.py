@@ -25,91 +25,93 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 #######################################################################################################
 
-def compute_6h_climatology_hourofyear(da, window_days=90):
+def compute_climatology_slotofyear(da, timesteps_per_day, window_days=90):
     """
-    Compute a smoothed 6-hourly climatology using a rolling window in 'hourofyear'.
-    Each year has 4 six-hourly slots per day, leading to a range from 0 to ~1460.
-
+    Compute a smoothed sub-daily climatology using a rolling window in 'slotofyear'.
+ 
     Parameters
     ----------
     da : xarray.DataArray
-        6-hourly data with a time dimension.
+        Sub-daily data with a time dimension.
+    timesteps_per_day : int
+        Number of timesteps per day (e.g., 4 for 6-hourly, 8 for 3-hourly, 24 for hourly).
     window_days : int, optional
         Number of days for the rolling-window smoothing. Default is 90.
-        The actual rolling window in 'hourofyear' units will be 4 * window_days,
-        because there are 4 six-hourly slots per day.
-
+ 
     Returns
     -------
-    da_clim_smooth : xarray.DataArray
-        6-hourly climatology grouped by 'hourofyear', smoothed with a rolling window.
+    clim_smooth : xarray.DataArray
+        Climatology grouped by 'slotofyear', smoothed with a rolling window.
     """
     if 'time' not in da.dims:
         raise ValueError("Input DataArray must have a 'time' dimension.")
-
-    # Compute hourofyear in six-hourly units (ranges from 0 to ~1460 for non-leap years)
-    hourofyear_vals = ((da.time.dt.dayofyear - 1) * 4 + (da.time.dt.hour // 6)).values
-
-    da_6h = da.assign_coords(hourofyear=("time", hourofyear_vals))
-
-    # Compute raw 6-hourly climatology
-    clim_raw = da_6h.groupby("hourofyear").mean(dim="time")
-
-    # Define rolling window size (~90 days in six-hourly slots)
-    window_6h = window_days * 4  # 90 * 4 = 360 six-hourly slots
-
-    # Apply rolling mean with cyclic extension
+ 
+    hours_per_slot = 24 // timesteps_per_day
+    slotofyear_vals = (
+        (da.time.dt.dayofyear - 1) * timesteps_per_day
+        + (da.time.dt.hour // hours_per_slot)
+    ).values
+ 
+    da = da.assign_coords(slotofyear=("time", slotofyear_vals))
+ 
+    clim_raw = da.groupby("slotofyear").mean(dim="time")
+ 
+    window = window_days * timesteps_per_day
+ 
     clim_smooth = (
-        xr.concat([clim_raw, clim_raw, clim_raw], dim="hourofyear")
-            .rolling(hourofyear=window_6h, center=True, min_periods=1)
+        xr.concat([clim_raw, clim_raw, clim_raw], dim="slotofyear")
+            .rolling(slotofyear=window, center=True, min_periods=1)
             .mean()
-            .isel(hourofyear=slice(len(clim_raw), 2 * len(clim_raw)))  # Keep only the original range
+            .isel(slotofyear=slice(len(clim_raw), 2 * len(clim_raw)))
     )
-
+ 
     return clim_smooth
-#######################################################################################################
-def compute_normalization(anomalies, window_days=15):
+ 
+ 
+def compute_normalization(anomalies, timesteps_per_day, window_days=15):
     """
-    Compute the running standard deviation for anomalies using a rolling window in 'hourofyear'.
-    This standard deviation can be used for normalization purposes.
-
-    Parameters:
-        anomalies (xr.DataArray): Anomalies data with dimensions (time, lat, lon).
-        window_days (int): Half-window size in days (default is 15 days for a ±15-day window).
-
-    Returns:
-        std_running (xr.DataArray): Running standard deviation computed over a 30-day window.
+    Compute the running standard deviation for anomalies using a rolling window
+    in 'slotofyear'.
+ 
+    Parameters
+    ----------
+    anomalies : xr.DataArray
+        Anomalies data with dimensions (time, lat, lon).
+    timesteps_per_day : int
+        Number of timesteps per day (e.g., 4 for 6-hourly, 8 for 3-hourly, 24 for hourly).
+    window_days : int, optional
+        Half-window size in days (default is 15 days for a ±15-day window).
+ 
+    Returns
+    -------
+    clim_std_smooth : xr.DataArray
+        Running standard deviation computed over a 2*window_days rolling window.
     """
     if 'time' not in anomalies.dims:
         raise ValueError("Input DataArray must have a 'time' dimension.")
-
-    # Define 'hourofyear' in six-hourly units (0 to ~1460 for non-leap years)
-    hourofyear_vals = ((anomalies.time.dt.dayofyear - 1) * 4 + (anomalies.time.dt.hour // 6)).values
-    anomalies = anomalies.assign_coords(
-        hourofyear=("time", hourofyear_vals)
-    )
-
-    # Define rolling window size in six-hourly slots
-    rolling_window = (2 * window_days) * 4 + 1  # For window_days=15, rolling_window=121
-
-    # Compute raw standard deviation grouped by 'hourofyear'
-    # This calculates the standard deviation for each 'hourofyear' slot across all years
-    clim_std_raw = anomalies.groupby("hourofyear").std(dim="time")
-
-    # Apply rolling window with cyclic extension to smooth the standard deviation
-    # Concatenate the climatological std three times to handle the cyclic nature
-    clim_std_extended = xr.concat([clim_std_raw, clim_std_raw, clim_std_raw], dim="hourofyear")
-
-    # Apply rolling standard deviation over the extended 'hourofyear' dimension
+ 
+    hours_per_slot = 24 // timesteps_per_day
+    slotofyear_vals = (
+        (anomalies.time.dt.dayofyear - 1) * timesteps_per_day
+        + (anomalies.time.dt.hour // hours_per_slot)
+    ).values
+ 
+    anomalies = anomalies.assign_coords(slotofyear=("time", slotofyear_vals))
+ 
+    rolling_window = (2 * window_days) * timesteps_per_day + 1
+ 
+    clim_std_raw = anomalies.groupby("slotofyear").std(dim="time")
+ 
+    clim_std_extended = xr.concat([clim_std_raw, clim_std_raw, clim_std_raw], dim="slotofyear")
+ 
     clim_std_smooth_extended = clim_std_extended.rolling(
-        hourofyear=rolling_window, center=True, min_periods=1
+        slotofyear=rolling_window, center=True, min_periods=1
     ).mean()
-
-    # Slice to retain only the original range of 'hourofyear' slots
+ 
     clim_std_smooth = clim_std_smooth_extended.isel(
-        hourofyear=slice(len(clim_std_raw), 2 * len(clim_std_raw))
+        slotofyear=slice(len(clim_std_raw), 2 * len(clim_std_raw))
     )
-
+ 
     return clim_std_smooth
 #######################################################################################################
 def lanczos_filter_10_day_lowpass(
@@ -267,26 +269,47 @@ def compute_iwr(z500_anomaly, cluster_means):
 #######################################################################################################  
 def identify_weather_regimes_grams(
     IWR,
+    timesteps_per_day,
     threshold=1.0,
     min_days=5.0,
     max_time_diff_days=100.0
 ):
-
+    """
+    Identify weather regime life cycles from IWR time series.
+ 
+    Parameters
+    ----------
+    IWR : pd.DataFrame
+        DataFrame with a 'time' column and one column per regime label.
+    timesteps_per_day : int
+        Number of timesteps per day (e.g., 4 for 6-hourly, 8 for 3-hourly, 24 for hourly).
+    threshold : float, optional
+        Minimum IWR value to consider a regime active. Default is 1.0.
+    min_days : float, optional
+        Minimum life cycle duration in days. Default is 5.0.
+    max_time_diff_days : float, optional
+        Maximum peak-to-peak distance in days allowed when merging cycles. Default is 100.0.
+ 
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns 'time' and 'WR' (regime label or 'No').
+    """
     regime_labels = ["GL", "ScTr", "EuBL", "AR", "ScBL", "ZO", "AT"]
-
+ 
     # 1) Basic Setup & Checks
     IWR = IWR.sort_values('time').reset_index(drop=True)
     times = IWR['time'].values
     n_steps = len(IWR)
-
+ 
     if not {'time', *regime_labels}.issubset(IWR.columns):
         raise ValueError(f"IWR must have columns 'time' plus all regime labels: {regime_labels}")
-
-    steps_min_lifecycle = int(math.ceil(min_days * 4))
-    steps_max_diff = int(math.ceil(max_time_diff_days * 4))
-
+ 
+    steps_min_lifecycle = int(math.ceil(min_days * timesteps_per_day))
+    steps_max_diff = int(math.ceil(max_time_diff_days * timesteps_per_day))
+ 
     all_life_cycles = []
-
+ 
     # 2) Find Local Maxima & Preliminary Life Cycles
     def find_prelim_lifecycles(label, iwr_arr):
         prelim = []
@@ -307,17 +330,17 @@ def identify_weather_regimes_grams(
                         'decay_idx': d
                     })
         return prelim
-
+ 
     for label in regime_labels:
         arr = IWR[label].values
         pcycles = find_prelim_lifecycles(label, arr)
-
+ 
         valid = []
         for c in pcycles:
             dur = c['decay_idx'] - c['onset_idx'] + 1
             if dur >= steps_min_lifecycle:
                 valid.append(c)
-
+ 
         valid.sort(key=lambda x: (x['onset_idx'], x['max_idx']))
         merged = []
         i = 0
@@ -354,9 +377,9 @@ def identify_weather_regimes_grams(
                     merged.append(current)
             else:
                 merged.append(current)
-
+ 
         all_life_cycles.extend(merged)
-
+ 
     # 3) Strong & Meaningful Filter
     final_life_cycles = []
     for c in all_life_cycles:
@@ -364,7 +387,7 @@ def identify_weather_regimes_grams(
         o = c['onset_idx']
         d = c['decay_idx']
         arr_r = IWR[label].values
-
+ 
         found_winning_step = False
         for t in range(o, d+1):
             val_r = arr_r[t]
@@ -378,10 +401,10 @@ def identify_weather_regimes_grams(
             if better_than_all:
                 found_winning_step = True
                 break
-
+ 
         if found_winning_step:
             final_life_cycles.append(c)
-
+ 
     # 4) Active mask
     active = {label: np.zeros(n_steps, dtype=bool) for label in regime_labels}
     for c in final_life_cycles:
@@ -389,7 +412,7 @@ def identify_weather_regimes_grams(
         o = c['onset_idx']
         d = c['decay_idx']
         active[label][o:(d+1)] = True
-
+ 
     # 5) Label selection
     labels_per_timestep = []
     for t in range(n_steps):
@@ -404,7 +427,7 @@ def identify_weather_regimes_grams(
             candidates = [label for label, val in values.items() if val == max_val]
             chosen = sorted(candidates)[0]
             labels_per_timestep.append(chosen)
-
+ 
     return pd.DataFrame({
         "time": IWR["time"],
         "WR": ["No" if r == -1 else r for r in labels_per_timestep]
